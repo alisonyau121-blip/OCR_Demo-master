@@ -1,8 +1,8 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:signature/signature.dart';
+import 'package:logging/logging.dart';
 import 'signature_preview_page.dart';
 
 class DigitalSignaturePage extends StatefulWidget {
@@ -13,6 +13,8 @@ class DigitalSignaturePage extends StatefulWidget {
 }
 
 class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
+  static final _log = Logger('DigitalSignaturePage');
+  
   late SignatureController _controller;
   bool _saving = false;
   bool _isLandscape = false;
@@ -41,6 +43,7 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
 
   Future<void> _saveSignature() async {
     if (_controller.isEmpty) {
+      _log.warning('Attempted to save empty signature');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please draw a signature first'),
@@ -50,16 +53,19 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
       return;
     }
 
+    _log.info('Starting signature save process');
     setState(() => _saving = true);
 
     try {
       await WidgetsBinding.instance.endOfFrame;
 
       // Export signature with transparent background
+      _log.fine('Exporting transparent PNG');
       final transparentPng = await _controller.toPngBytes();
 
       // Null check - toPngBytes can return null
       if (transparentPng == null) {
+        _log.severe('Failed to generate signature image (returned null)');
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -69,9 +75,12 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
         );
         return;
       }
+      _log.info('Transparent PNG exported: ${transparentPng.length} bytes');
 
       // Create white background version by compositing
+      _log.fine('Creating white background version');
       final previewPng = await _createWhiteBackgroundVersion(transparentPng);
+      _log.info('Preview PNG created: ${previewPng.length} bytes');
 
       if (!mounted) return;
 
@@ -80,9 +89,12 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
         await SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
         ]);
+        if (!mounted) return;
         setState(() => _isLandscape = false);
       }
 
+      if (!mounted) return;
+      
       // Navigate to preview page (now in portrait)
       final result = await Navigator.push<dynamic>(
         context,
@@ -96,9 +108,10 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
 
       // Handle result if needed (for future integrations)
       if (result != null && mounted) {
-        print('Signature saved: $result');
+        _log.info('Signature saved successfully: $result');
       }
-    } catch (e) {
+    } catch (e, st) {
+      _log.severe('Error saving signature', e, st);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -170,17 +183,11 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
     );
   }
 
-  Future<bool> _onWillPop() async {
-    // Belt-and-suspenders: restore portrait before popping
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
           // Belt-and-suspenders: catch system back/swipe
           await SystemChrome.setPreferredOrientations([

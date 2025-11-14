@@ -251,15 +251,15 @@ class PassportMrzParser {
       
       // Line 2: PassportNo<<Nationality BirthDate Sex ExpiryDate OptionalData
       final passportNo = l2.substring(0, 9).replaceAll('<', '').trim();
-      final passportCheck = l2[9];
+      // final passportCheck = l2[9]; // Check digit (not validated in MVP)
       final nationality = l2.substring(10, 13).replaceAll('<', '');
       final birthDate = l2.substring(13, 19); // YYMMDD
-      final birthCheck = l2[19];
+      // final birthCheck = l2[19]; // Check digit (not validated in MVP)
       final sex = l2[20]; // M/F
       final expiryDate = l2.substring(21, 27); // YYMMDD
-      final expiryCheck = l2[27];
+      // final expiryCheck = l2[27]; // Check digit (not validated in MVP)
       final optionalData = l2.substring(28, 42).replaceAll('<', '').trim();
-      final finalCheck = l2[43];
+      // final finalCheck = l2[43]; // Check digit (not validated in MVP)
       
       // Format dates
       final formattedBirth = _formatMrzDate(birthDate);

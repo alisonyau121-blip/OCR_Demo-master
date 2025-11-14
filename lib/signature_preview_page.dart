@@ -1,10 +1,11 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:gal/gal.dart';
+import 'package:logging/logging.dart';
 
 class SignaturePreviewPage extends StatefulWidget {
   final Uint8List previewPngBytes;
@@ -21,6 +22,7 @@ class SignaturePreviewPage extends StatefulWidget {
 }
 
 class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
+  static final _log = Logger('SignaturePreviewPage');
   bool _processing = false;
 
   @override
@@ -66,6 +68,7 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
   }
 
   Future<void> _saveToGallery() async {
+    _log.info('Starting save to gallery process');
     setState(() => _processing = true);
 
     try {
@@ -73,14 +76,17 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final fileName = 'signature_$timestamp.png';
       
+      _log.fine('Writing to temp file: signature_$timestamp.png');
       // Save to temporary directory first
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/$fileName';
       final tempFile = File(tempPath);
       await tempFile.writeAsBytes(widget.previewPngBytes);
       
+      _log.info('Saving to gallery...');
       // Save to gallery using Gal
       await Gal.putImage(tempPath, album: 'Signatures');
+      _log.info('Successfully saved to gallery');
 
       if (!mounted) return;
 
@@ -93,10 +99,11 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
       );
 
       // Clean up temp file
+      _log.fine('Cleaning up temp file');
       try {
         await tempFile.delete();
-      } catch (_) {
-        // Ignore cleanup errors
+      } catch (e) {
+        _log.warning('Failed to delete temp file: $e');
       }
 
       // Belt-and-suspenders: restore portrait before popping
@@ -108,7 +115,8 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
 
       // Return to home
       Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (e) {
+    } catch (e, st) {
+      _log.severe('Failed to save to gallery', e, st);
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -140,7 +148,7 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: !_processing,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
           // Belt-and-suspenders: catch system back/swipe
           await SystemChrome.setPreferredOrientations([
@@ -187,7 +195,7 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 10,
                                 spreadRadius: 2,
                               ),
