@@ -122,25 +122,18 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
   }
 
   Future<void> _downloadPdf() async {
+    // Only download signed PDF (button is disabled if no signed version exists)
+    if (signedPdfBytes == null) {
+      _log.warning('Download attempted without signed PDF');
+      return;
+    }
+    
     try {
-      _log.info('Starting PDF download');
+      _log.info('Starting signed PDF download');
       
-      Uint8List pdfBytes;
-      String fileName;
-      bool isSigned = signedPdfBytes != null;
-      
-      if (isSigned) {
-        // Use signed PDF from memory
-        _log.info('Using signed PDF from memory');
-        pdfBytes = signedPdfBytes!;
-        fileName = 'MINA_1_signed.pdf';
-      } else {
-        // Load PDF from assets
-        _log.info('Loading original PDF from assets');
-        final ByteData data = await rootBundle.load('assets/pdfs/MINA 1 (1).pdf');
-        pdfBytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-        fileName = 'MINA_1.pdf';
-      }
+      // Use signed PDF from memory
+      final pdfBytes = signedPdfBytes!;
+      const fileName = 'MINA_1_signed.pdf';
       
       // Get downloads directory
       Directory? downloadsDir;
@@ -163,18 +156,18 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
       // Write PDF to file
       await file.writeAsBytes(pdfBytes, flush: true);
       
-      _log.info('PDF downloaded to: ${file.path}');
+      _log.info('Signed PDF downloaded to: ${file.path}');
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${isSigned ? "Signed " : ""}PDF downloaded to:\n${file.path}'),
+          content: Text('Signed PDF downloaded to:\n${file.path}'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 4),
         ),
       );
     } catch (e, st) {
-      _log.severe('Failed to download PDF', e, st);
+      _log.severe('Failed to download signed PDF', e, st);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -295,6 +288,23 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
 
   void _handleGeneratePdf() {
     _generateSignedPdf();
+  }
+
+  void _handlePreviewPdf() {
+    if (signedPdfBytes == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PdfViewerScreen(
+          pdfBytes: signedPdfBytes,
+          title: 'Signed PDF Preview',
+        ),
+      ),
+    );
+  }
+
+  void _handleDownloadPdf() {
+    if (signedPdfBytes == null) return;
+    _downloadPdf();
   }
 
   Future<void> _generateSignedPdf() async {
@@ -428,31 +438,45 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
               ),
               const SizedBox(height: standardSpacing),
               
-              // Preview PDF button
-              createIconButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (context) => PdfViewerScreen(
-                        assetPath: signedPdfBytes == null ? 'assets/pdfs/MINA 1 (1).pdf' : null,
-                        pdfBytes: signedPdfBytes,
-                        title: signedPdfBytes != null ? 'Signed PDF Preview' : 'PDF Preview',
-                      ),
-                    ),
-                  );
-                },
-                icon: Icons.picture_as_pdf,
-                label: signedPdfBytes != null ? 'Preview Signed PDF' : 'Preview PDF',
-                backgroundColor: Colors.orange,
+              // Preview PDF button (only works with signed version)
+              ElevatedButton.icon(
+                onPressed: signedPdfBytes != null ? _handlePreviewPdf : null,
+                icon: Icon(
+                  Icons.picture_as_pdf,
+                  size: 32,
+                ),
+                label: Text(
+                  signedPdfBytes != null ? 'Preview Signed PDF' : 'Preview PDF (Need Signed)',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: signedPdfBytes != null ? Colors.orange : Colors.grey,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
               ),
               const SizedBox(height: standardSpacing),
               
-              // Download PDF button
-              createIconButton(
-                onPressed: _downloadPdf,
-                icon: Icons.download,
-                label: signedPdfBytes != null ? 'Download Signed PDF' : 'Download PDF',
-                backgroundColor: Colors.teal,
+              // Download PDF button (only works with signed version)
+              ElevatedButton.icon(
+                onPressed: signedPdfBytes != null ? _handleDownloadPdf : null,
+                icon: Icon(
+                  Icons.download,
+                  size: 32,
+                ),
+                label: Text(
+                  signedPdfBytes != null ? 'Download Signed PDF' : 'Download PDF (Need Signed)',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: signedPdfBytes != null ? Colors.teal : Colors.grey,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
               ),
               const SizedBox(height: standardSpacing),
               
