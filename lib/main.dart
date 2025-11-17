@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:logging/logging.dart';
+import 'package:path_provider/path_provider.dart';
 import 'utils/logger.dart';
 import 'utils/ui_helpers.dart';
 import 'screens/display_picture_screen.dart';
+import 'screens/pdf_viewer_screen.dart';
 import 'digital_signature_page.dart';
 
 Future<void> main() async {
@@ -105,6 +109,63 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
     }
   }
 
+  Future<void> _downloadPdf() async {
+    try {
+      _log.info('Starting PDF download');
+      
+      // Load PDF from assets
+      final ByteData data = await rootBundle.load('assets/pdfs/MINA 1 (1).pdf');
+      
+      // Get downloads directory
+      Directory? downloadsDir;
+      if (Platform.isAndroid) {
+        downloadsDir = Directory('/storage/emulated/0/Download');
+        if (!await downloadsDir.exists()) {
+          downloadsDir = await getExternalStorageDirectory();
+        }
+      } else {
+        downloadsDir = await getApplicationDocumentsDirectory();
+      }
+      
+      if (downloadsDir == null) {
+        throw Exception('Could not access downloads directory');
+      }
+      
+      // Create file with sanitized name
+      final String fileName = 'MINA_1.pdf';
+      final File file = File('${downloadsDir.path}/$fileName');
+      
+      // Write PDF to file
+      await file.writeAsBytes(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        flush: true,
+      );
+      
+      _log.info('PDF downloaded to: ${file.path}');
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF downloaded to:\n${file.path}'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e, st) {
+      _log.severe('Failed to download PDF', e, st);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download PDF: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,6 +236,33 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
                 icon: Icons.edit,
                 label: 'Digital Signature',
                 backgroundColor: Colors.purple,
+              ),
+              const SizedBox(height: standardSpacing),
+              
+              // Preview PDF button
+              createIconButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const PdfViewerScreen(
+                        assetPath: 'assets/pdfs/MINA 1 (1).pdf',
+                        title: 'PDF Preview',
+                      ),
+                    ),
+                  );
+                },
+                icon: Icons.picture_as_pdf,
+                label: 'Preview PDF',
+                backgroundColor: Colors.orange,
+              ),
+              const SizedBox(height: standardSpacing),
+              
+              // Download PDF button
+              createIconButton(
+                onPressed: _downloadPdf,
+                icon: Icons.download,
+                label: 'Download PDF',
+                backgroundColor: Colors.teal,
               ),
               const SizedBox(height: 24), // Bottom padding
             ],
