@@ -9,6 +9,8 @@ import 'utils/logger.dart';
 import 'utils/ui_helpers.dart';
 import 'screens/display_picture_screen.dart';
 import 'screens/pdf_viewer_screen.dart';
+import 'screens/user_input_form_screen.dart';
+import 'screens/form_confirmation_screen.dart';
 import 'digital_signature_page.dart';
 import 'models/signature_result.dart';
 import 'services/pdf_api_service.dart';
@@ -81,6 +83,9 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
   // PDF generation state
   bool _generatingPdf = false;
   Uint8List? signedPdfBytes;
+  
+  // Form data tracking
+  Map<String, String>? userFormData;
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -307,6 +312,33 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
     _downloadPdf();
   }
 
+  Future<void> _handleUserInputForm() async {
+    _log.info('Opening user input form');
+    
+    final formData = await Navigator.of(context).push<Map<String, String>>(
+      MaterialPageRoute(
+        builder: (context) => const UserInputFormScreen(),
+      ),
+    );
+    
+    if (formData != null && mounted) {
+      _log.info('Form data received: $formData');
+      
+      setState(() {
+        userFormData = formData;
+      });
+      
+      // Navigate to confirmation screen
+      if (mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => FormConfirmationScreen(formData: formData),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _generateSignedPdf() async {
     if (clientSignature == null || adviserSignature == null) {
       _log.warning('Attempted to generate PDF without both signatures');
@@ -324,10 +356,21 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
 
     try {
       // Insert signatures into PDF
-      final pdfBytes = await _pdfService.insertSignaturesToPdf(
+      var pdfBytes = await _pdfService.insertSignaturesToPdf(
         clientSignaturePng: clientSignature!.transparentPng,
         adviserSignaturePng: adviserSignature!.transparentPng,
       );
+
+      // Insert form data if available
+      if (userFormData != null) {
+        _log.info('Inserting user form data into PDF');
+        pdfBytes = await _pdfService.insertFormDataToPdf(
+          pdfBytes: pdfBytes,
+          designation: userFormData!['Designation'] ?? '',
+          companyName: userFormData!['CompanyName'] ?? '',
+          adviserName: userFormData!['AdviserName'] ?? '',
+        );
+      }
 
       // Store signed PDF in memory
       setState(() {
@@ -340,9 +383,14 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
       if (!mounted) return;
 
       // Show success message
+      final hasFormData = userFormData != null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓ Signed PDF saved to:\n$filePath\n\nPreview & Download now use signed version'),
+          content: Text(
+            hasFormData
+                ? '✓ Signed PDF with form data saved to:\n$filePath\n\nPreview & Download now use signed version'
+                : '✓ Signed PDF saved to:\n$filePath\n\nPreview & Download now use signed version'
+          ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
           action: SnackBarAction(
@@ -501,6 +549,28 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
                   backgroundColor: (clientSignature != null && adviserSignature != null)
                       ? Colors.indigo
                       : Colors.grey,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+              ),
+              const SizedBox(height: standardSpacing),
+              
+              // User Input Form button
+              ElevatedButton.icon(
+                onPressed: _handleUserInputForm,
+                icon: Icon(
+                  userFormData != null ? Icons.check_circle : Icons.assignment,
+                  size: 32,
+                ),
+                label: Text(
+                  userFormData != null ? 'User Form Submitted ✓' : 'User Input Form',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: userFormData != null ? Colors.green : Colors.amber,
+                  foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 56),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(28),

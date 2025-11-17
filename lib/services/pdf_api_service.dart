@@ -24,6 +24,73 @@ class PdfApiService {
     }
   }
   
+  /// Insert form data into PDF text fields
+  Future<Uint8List> insertFormDataToPdf({
+    required Uint8List pdfBytes,
+    required String designation,
+    required String companyName,
+    required String adviserName,
+  }) async {
+    try {
+      _log.info('Inserting form data into PDF');
+      
+      // Load PDF document
+      final PdfDocument document = PdfDocument(inputBytes: pdfBytes);
+      _log.info('PDF document loaded for form data insertion');
+      
+      // Get form fields
+      final PdfForm form = document.form;
+      _log.info('Form fields count: ${form.fields.count}');
+      
+      // Insert form data into corresponding fields
+      bool designationFound = false;
+      bool companyNameFound = false;
+      bool adviserNameFound = false;
+      
+      for (int i = 0; i < form.fields.count; i++) {
+        final PdfField field = form.fields[i];
+        
+        if (field is PdfTextBoxField) {
+          _log.fine('Text field $i: ${field.name}');
+          
+          if (field.name == 'Designation') {
+            _log.info('Found Designation field, inserting: $designation');
+            field.text = designation;
+            designationFound = true;
+          } else if (field.name == 'CompanyName') {
+            _log.info('Found CompanyName field, inserting: $companyName');
+            field.text = companyName;
+            companyNameFound = true;
+          } else if (field.name == 'AdviserName') {
+            _log.info('Found AdviserName field, inserting: $adviserName');
+            field.text = adviserName;
+            adviserNameFound = true;
+          }
+        }
+      }
+      
+      if (!designationFound) {
+        _log.warning('Designation field not found in PDF');
+      }
+      if (!companyNameFound) {
+        _log.warning('CompanyName field not found in PDF');
+      }
+      if (!adviserNameFound) {
+        _log.warning('AdviserName field not found in PDF');
+      }
+      
+      // Save and return PDF bytes
+      final List<int> savedBytes = await document.save();
+      document.dispose();
+      
+      _log.info('Form data inserted successfully: ${savedBytes.length} bytes');
+      return Uint8List.fromList(savedBytes);
+    } catch (e, st) {
+      _log.severe('Failed to insert form data into PDF', e, st);
+      rethrow;
+    }
+  }
+  
   /// Insert signatures into PDF form fields
   Future<Uint8List> insertSignaturesToPdf({
     required Uint8List clientSignaturePng,
