@@ -6,7 +6,12 @@ import 'package:logging/logging.dart';
 import 'signature_preview_page.dart';
 
 class DigitalSignaturePage extends StatefulWidget {
-  const DigitalSignaturePage({super.key});
+  final String role;
+  
+  const DigitalSignaturePage({
+    super.key,
+    required this.role,
+  });
 
   @override
   State<DigitalSignaturePage> createState() => _DigitalSignaturePageState();
@@ -102,13 +107,15 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
           builder: (context) => SignaturePreviewPage(
             previewPngBytes: previewPng,
             transparentPngBytes: transparentPng,
+            role: widget.role,
           ),
         ),
       );
 
-      // Handle result if needed (for future integrations)
+      // Pass result back to main screen
       if (result != null && mounted) {
-        _log.info('Signature saved successfully: $result');
+        _log.info('Signature saved successfully, returning to main: $result');
+        Navigator.of(context).pop(result);
       }
     } catch (e, st) {
       _log.severe('Error saving signature', e, st);
@@ -197,7 +204,7 @@ class _DigitalSignaturePageState extends State<DigitalSignaturePage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Digital Signature'),
+          title: Text('Digital Signature - ${widget.role}'),
           centerTitle: true,
         ),
         body: Column(

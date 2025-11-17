@@ -9,6 +9,8 @@ import 'utils/ui_helpers.dart';
 import 'screens/display_picture_screen.dart';
 import 'screens/pdf_viewer_screen.dart';
 import 'digital_signature_page.dart';
+import 'models/signature_result.dart';
+import 'services/pdf_api_service.dart';
 
 Future<void> main() async {
   // Setup logging infrastructure
@@ -69,6 +71,14 @@ class SelectImageScreen extends StatefulWidget {
 class _SelectImageScreenState extends State<SelectImageScreen> {
   static final _log = Logger('SelectImageScreen');
   final ImagePicker _picker = ImagePicker();
+  final PdfApiService _pdfService = PdfApiService();
+  
+  // Signature tracking
+  SignatureResult? clientSignature;
+  SignatureResult? adviserSignature;
+  
+  // PDF generation state
+  bool _generatingPdf = false;
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -166,6 +176,174 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
     }
   }
 
+  Future<void> _showRoleSelectionDialog() async {
+    final role = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Signer Role'),
+        content: const Text('Who is signing this document?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'Client'),
+            child: const Text(
+              'Client',
+              style: TextStyle(fontSize: 18),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'Adviser'),
+            child: const Text(
+              'Adviser',
+              style: TextStyle(fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (role != null && mounted) {
+      _log.info('Role selected: $role');
+      final result = await Navigator.of(context).push<SignatureResult>(
+        MaterialPageRoute(
+          builder: (context) => DigitalSignaturePage(role: role),
+        ),
+      );
+      
+      // Handle the returned signature result
+      if (result != null && mounted) {
+        _handleSignatureResult(result);
+      }
+    }
+  }
+  
+  void _handleSignatureResult(SignatureResult result) {
+    _log.info('Received signature for role: ${result.role}');
+    
+    setState(() {
+      if (result.role == 'Client') {
+        clientSignature = result;
+      } else if (result.role == 'Adviser') {
+        adviserSignature = result;
+      }
+    });
+    
+    // Check completion status
+    _checkSignatureCompletion(result.role);
+  }
+  
+  void _checkSignatureCompletion(String justSignedRole) {
+    if (justSignedRole == 'Client') {
+      if (adviserSignature != null) {
+        // Both have signed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ Both Client and Adviser have signed!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // Only client signed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Client signature saved. Adviser has not signed yet.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } else if (justSignedRole == 'Adviser') {
+      if (clientSignature != null) {
+        // Both have signed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ Both Client and Adviser have signed!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // Only adviser signed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Adviser signature saved. Client has not signed yet.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  bool _canGeneratePdf() {
+    return clientSignature != null && 
+           adviserSignature != null && 
+           !_generatingPdf;
+  }
+
+  void _handleGeneratePdf() {
+    _generateSignedPdf();
+  }
+
+  Future<void> _generateSignedPdf() async {
+    if (clientSignature == null || adviserSignature == null) {
+      _log.warning('Attempted to generate PDF without both signatures');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Both signatures are required to generate PDF'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    _log.info('Starting PDF generation with both signatures');
+    setState(() => _generatingPdf = true);
+
+    try {
+      // Insert signatures into PDF
+      final pdfBytes = await _pdfService.insertSignaturesToPdf(
+        clientSignaturePng: clientSignature!.transparentPng,
+        adviserSignaturePng: adviserSignature!.transparentPng,
+      );
+
+      // Save PDF to device
+      final filePath = await _pdfService.savePdfToDevice(pdfBytes);
+
+      if (!mounted) return;
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Signed PDF saved to:\n$filePath'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
+      );
+    } catch (e, st) {
+      _log.severe('Failed to generate signed PDF', e, st);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate PDF: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _generatingPdf = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,13 +404,7 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
               
               // Digital signature button
               createIconButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (context) => const DigitalSignaturePage(),
-                    ),
-                  );
-                },
+                onPressed: _showRoleSelectionDialog,
                 icon: Icons.edit,
                 label: 'Digital Signature',
                 backgroundColor: Colors.purple,
@@ -263,6 +435,35 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
                 icon: Icons.download,
                 label: 'Download PDF',
                 backgroundColor: Colors.teal,
+              ),
+              const SizedBox(height: standardSpacing),
+              
+              // Generate Signed PDF button
+              ElevatedButton.icon(
+                onPressed: _canGeneratePdf() ? _handleGeneratePdf : null,
+                icon: Icon(
+                  _generatingPdf
+                      ? Icons.hourglass_empty
+                      : Icons.picture_as_pdf,
+                  size: 32,
+                ),
+                label: Text(
+                  _generatingPdf
+                      ? 'Generating...'
+                      : (clientSignature != null && adviserSignature != null)
+                          ? 'Generate Signed PDF'
+                          : 'Need both signatures',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: (clientSignature != null && adviserSignature != null)
+                      ? Colors.indigo
+                      : Colors.grey,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
               ),
               const SizedBox(height: 24), // Bottom padding
             ],

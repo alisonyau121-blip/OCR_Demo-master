@@ -6,15 +6,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:gal/gal.dart';
 import 'package:logging/logging.dart';
+import 'models/signature_result.dart';
 
 class SignaturePreviewPage extends StatefulWidget {
   final Uint8List previewPngBytes;
   final Uint8List transparentPngBytes;
+  final String role;
 
   const SignaturePreviewPage({
     super.key,
     required this.previewPngBytes,
     required this.transparentPngBytes,
+    required this.role,
   });
 
   @override
@@ -72,11 +75,12 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
     setState(() => _processing = true);
 
     try {
-      // Generate timestamp-based filename
+      // Generate timestamp-based filename with role
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final fileName = 'signature_$timestamp.png';
+      final roleStr = widget.role.toLowerCase();
+      final fileName = 'signature_${roleStr}_$timestamp.png';
       
-      _log.fine('Writing to temp file: signature_$timestamp.png');
+      _log.fine('Writing to temp file: $fileName');
       // Save to temporary directory first
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/$fileName';
@@ -91,10 +95,10 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ Signature saved to gallery!'),
+        SnackBar(
+          content: Text('✓ ${widget.role} signature saved to gallery!'),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
 
@@ -113,8 +117,16 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
 
       if (!mounted) return;
 
-      // Return to home
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // Create SignatureResult object
+      final signatureResult = SignatureResult(
+        previewPng: widget.previewPngBytes,
+        transparentPng: widget.transparentPngBytes,
+        timestamp: DateTime.now(),
+        role: widget.role,
+      );
+
+      // Return result to digital signature page, then to main
+      Navigator.of(context).pop(signatureResult);
     } catch (e, st) {
       _log.severe('Failed to save to gallery', e, st);
       if (!mounted) return;
@@ -180,6 +192,32 @@ class _SignaturePreviewPageState extends State<SignaturePreviewPage> {
               )
             : Column(
                 children: [
+                  // Role information banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.blue.shade900,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Signer: ${widget.role}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
                   // Preview area
                   Expanded(
                     child: Center(
