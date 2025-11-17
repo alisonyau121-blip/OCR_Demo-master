@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -79,6 +80,7 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
   
   // PDF generation state
   bool _generatingPdf = false;
+  Uint8List? signedPdfBytes;
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -123,8 +125,22 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
     try {
       _log.info('Starting PDF download');
       
-      // Load PDF from assets
-      final ByteData data = await rootBundle.load('assets/pdfs/MINA 1 (1).pdf');
+      Uint8List pdfBytes;
+      String fileName;
+      bool isSigned = signedPdfBytes != null;
+      
+      if (isSigned) {
+        // Use signed PDF from memory
+        _log.info('Using signed PDF from memory');
+        pdfBytes = signedPdfBytes!;
+        fileName = 'MINA_1_signed.pdf';
+      } else {
+        // Load PDF from assets
+        _log.info('Loading original PDF from assets');
+        final ByteData data = await rootBundle.load('assets/pdfs/MINA 1 (1).pdf');
+        pdfBytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        fileName = 'MINA_1.pdf';
+      }
       
       // Get downloads directory
       Directory? downloadsDir;
@@ -141,22 +157,18 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
         throw Exception('Could not access downloads directory');
       }
       
-      // Create file with sanitized name
-      final String fileName = 'MINA_1.pdf';
+      // Create file
       final File file = File('${downloadsDir.path}/$fileName');
       
       // Write PDF to file
-      await file.writeAsBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true,
-      );
+      await file.writeAsBytes(pdfBytes, flush: true);
       
       _log.info('PDF downloaded to: ${file.path}');
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('PDF downloaded to:\n${file.path}'),
+          content: Text('${isSigned ? "Signed " : ""}PDF downloaded to:\n${file.path}'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 4),
         ),
@@ -307,6 +319,11 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
         adviserSignaturePng: adviserSignature!.transparentPng,
       );
 
+      // Store signed PDF in memory
+      setState(() {
+        signedPdfBytes = pdfBytes;
+      });
+
       // Save PDF to device
       final filePath = await _pdfService.savePdfToDevice(pdfBytes);
 
@@ -315,7 +332,7 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓ Signed PDF saved to:\n$filePath'),
+          content: Text('✓ Signed PDF saved to:\n$filePath\n\nPreview & Download now use signed version'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
           action: SnackBarAction(
@@ -416,15 +433,16 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) => const PdfViewerScreen(
-                        assetPath: 'assets/pdfs/MINA 1 (1).pdf',
-                        title: 'PDF Preview',
+                      builder: (context) => PdfViewerScreen(
+                        assetPath: signedPdfBytes == null ? 'assets/pdfs/MINA 1 (1).pdf' : null,
+                        pdfBytes: signedPdfBytes,
+                        title: signedPdfBytes != null ? 'Signed PDF Preview' : 'PDF Preview',
                       ),
                     ),
                   );
                 },
                 icon: Icons.picture_as_pdf,
-                label: 'Preview PDF',
+                label: signedPdfBytes != null ? 'Preview Signed PDF' : 'Preview PDF',
                 backgroundColor: Colors.orange,
               ),
               const SizedBox(height: standardSpacing),
@@ -433,7 +451,7 @@ class _SelectImageScreenState extends State<SelectImageScreen> {
               createIconButton(
                 onPressed: _downloadPdf,
                 icon: Icons.download,
-                label: 'Download PDF',
+                label: signedPdfBytes != null ? 'Download Signed PDF' : 'Download PDF',
                 backgroundColor: Colors.teal,
               ),
               const SizedBox(height: standardSpacing),

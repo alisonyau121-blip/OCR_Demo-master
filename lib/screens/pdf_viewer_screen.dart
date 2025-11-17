@@ -6,16 +6,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:logging/logging.dart';
 import '../utils/logger.dart';
 
-/// Screen to preview PDF documents from assets
+/// Screen to preview PDF documents from assets or memory
 class PdfViewerScreen extends StatefulWidget {
-  final String assetPath;
+  final String? assetPath;
+  final Uint8List? pdfBytes;
   final String title;
 
   const PdfViewerScreen({
     super.key,
-    required this.assetPath,
+    this.assetPath,
+    this.pdfBytes,
     this.title = 'PDF Preview',
-  });
+  }) : assert(assetPath != null || pdfBytes != null, 
+              'Either assetPath or pdfBytes must be provided');
 
   @override
   State<PdfViewerScreen> createState() => _PdfViewerScreenState();
@@ -36,24 +39,31 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _loadPdfFromAsset();
   }
 
-  /// Load PDF from assets and copy to temp directory for flutter_pdfview
+  /// Load PDF from assets or memory and copy to temp directory for flutter_pdfview
   Future<void> _loadPdfFromAsset() async {
     try {
-      _log.info('Loading PDF from asset: ${widget.assetPath}');
+      Uint8List pdfData;
+      String fileName;
       
-      // Load PDF from assets
-      final ByteData data = await rootBundle.load(widget.assetPath);
+      if (widget.pdfBytes != null) {
+        // Use PDF from memory
+        _log.info('Loading PDF from memory bytes');
+        pdfData = widget.pdfBytes!;
+        fileName = 'preview_pdf.pdf';
+      } else {
+        // Load PDF from assets
+        _log.info('Loading PDF from asset: ${widget.assetPath}');
+        final ByteData data = await rootBundle.load(widget.assetPath!);
+        pdfData = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        fileName = widget.assetPath!.split('/').last;
+      }
       
       // Get temporary directory
       final Directory tempDir = await getTemporaryDirectory();
-      final String fileName = widget.assetPath.split('/').last;
       final File tempFile = File('${tempDir.path}/$fileName');
       
       // Write to temp file
-      await tempFile.writeAsBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true,
-      );
+      await tempFile.writeAsBytes(pdfData, flush: true);
       
       _log.info('PDF copied to temp: ${tempFile.path}');
       
