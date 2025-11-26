@@ -1,0 +1,40 @@
+# Ignore demo app platform-specific directories
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# Ignore assets (contains private files)
+assets/
+
+# Ignore logs and temporary files
+*.log
+*.txt
+complete_log.txt
+crash_log.txt
+flutter-run.bat
+flutter-run.ps1
+
+# Ignore duplicate id_ocr_kit directory (we have lib/ at root now)
+id_ocr_kit/
+
+# Ignore test files from demo app
+test/
+
+# Ignore IDE and build artifacts
+.idea/
+.vscode/
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.metadata
+
+# Ignore git files
+.git/
+.gitignore
+
