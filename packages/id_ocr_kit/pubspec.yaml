@@ -1,0 +1,44 @@
+name: id_ocr_kit
+description: >
+  A Flutter package for ID document recognition and PDF form filling.
+  Supports Hong Kong ID (HKID), China Resident ID, and Passport MRZ parsing.
+  Uses provider pattern for maximum flexibility - bring your own OCR/PDF implementations.
+
+version: 0.1.0
+
+# This package can be published to pub.dev or used locally
+publish_to: 'none'
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Core dependencies
+  logging: ^1.2.0
+  
+  # Dependencies for reference implementations (ML Kit OCR adapter)
+  # These are included so the package works out of the box
+  # Consumer apps can use these or implement their own providers
+  google_mlkit_text_recognition: ^0.15.0
+  
+  # Dependencies for reference implementations (Syncfusion PDF adapter)
+  syncfusion_flutter_pdf: ^31.2.10
+  
+  # For path operations
+  path_provider: ^2.1.4
+  
+  # For internationalization support
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  flutter_lints: ^5.0.0
+
+# The following section is specific to Flutter packages.
+flutter:
+  # This package does not bundle any assets
